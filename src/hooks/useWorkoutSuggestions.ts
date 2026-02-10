@@ -32,6 +32,9 @@ interface TimeSlot {
 
 const DAY_NAMES = ['vasárnap', 'hétfő', 'kedd', 'szerda', 'csütörtök', 'péntek', 'szombat']
 const WORKOUT_DURATION = 2.5 // hours
+const EVENT_BUFFER = 0.5 // 30 min buffer around events for commute/prep
+const FRIEND_SLEEP_START = 5  // after night shift, friend sleeps 05:00
+const FRIEND_SLEEP_END = 14   // until ~14:00
 
 function timeToHours(time: string): number {
     const [h, m] = time.split(':').map(Number)
@@ -133,29 +136,44 @@ export function useWorkoutSuggestions(weekStartDate: Date, cycleStartDate: strin
                         })
                     }
 
-                    // 2. Events (girlfriend, cooking, etc.)
+                    // 2. Events (girlfriend, cooking, etc.) — with buffer
                     const dayEvents = weekEvents.filter(e => e.event_date === dateStr)
                     for (const evt of dayEvents) {
                         if (evt.start_time && evt.end_time) {
                             busySlots.push({
-                                start: timeToHours(evt.start_time),
-                                end: timeToHours(evt.end_time),
+                                start: Math.max(timeToHours(evt.start_time) - EVENT_BUFFER, 0),
+                                end: Math.min(timeToHours(evt.end_time) + EVENT_BUFFER, 24),
                                 label: evt.title || evt.event_type,
                             })
                         }
                     }
 
-                    // 3. Already has a workout event scheduled?
+                    // 3. Already has a workout event scheduled? → skip entirely
                     const hasWorkoutEvent = dayEvents.some(e => e.event_type === 'workout')
+                    if (hasWorkoutEvent) continue
 
-                    // 4. Friend's classes
+                    // 4. Friend's classes — block as busy but also use for scoring
                     const friendClasses = friendSchedule.filter(f => f.day_of_week === friendDow)
+                    for (const fc of friendClasses) {
+                        busySlots.push({
+                            start: timeToHours(fc.start_time),
+                            end: timeToHours(fc.end_time),
+                            label: `Barát órája`,
+                        })
+                    }
 
-                    // 5. Friend night shift → sleeping until 14:00
+                    // 5. Friend night shift → sleeping 05:00–14:00, block as busy
                     const prevDateStr = format(addDays(day, -1), 'yyyy-MM-dd')
                     const friendSleptToday = nightShifts.some(
                         (ns: any) => ns.night_shift_date === prevDateStr
                     )
+                    if (friendSleptToday) {
+                        busySlots.push({
+                            start: FRIEND_SLEEP_START,
+                            end: FRIEND_SLEEP_END,
+                            label: 'Barát alszik (éjszakai)',
+                        })
+                    }
 
                     // ─── Calculate free slots ────────────
                     // Workout window: 07:00 - 21:00
@@ -267,8 +285,8 @@ export function useWorkoutSuggestions(weekStartDate: Date, cycleStartDate: strin
                         suggestedStartTime: hoursToTime(workoutStart),
                         suggestedEndTime: hoursToTime(workoutEnd),
                         reason,
-                        tags: hasWorkoutEvent ? ['✅ Már beütemezve', ...best.tags] : best.tags,
-                        confidence: hasWorkoutEvent ? 'ideal' : confidence,
+                        tags: best.tags,
+                        confidence,
                     }
 
                     allSuggestions.push(suggestion)

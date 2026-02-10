@@ -8,7 +8,7 @@ import { useWorkoutCycle } from '@/hooks/useCalendarData'
 import { getWorkoutTypeInfo, type WorkoutType } from '@/lib/workout-cycle'
 
 interface WorkoutSuggestionsProps {
-    onSchedule?: (suggestion: WorkoutSuggestion) => void
+    onSchedule?: (suggestion: WorkoutSuggestion) => Promise<void> | void
 }
 
 const confidenceConfig = {
@@ -23,7 +23,7 @@ export default function WorkoutSuggestions({ onSchedule }: WorkoutSuggestionsPro
     const today = new Date()
     const weekStart = startOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 })
     const { cycle } = useWorkoutCycle()
-    const { suggestions, loading } = useWorkoutSuggestions(
+    const { suggestions, loading, refetch } = useWorkoutSuggestions(
         weekStart,
         cycle?.cycle_start_date || null
     )
@@ -199,7 +199,12 @@ export default function WorkoutSuggestions({ onSchedule }: WorkoutSuggestionsPro
                                     {/* Schedule button */}
                                     {onSchedule && !isScheduled && (
                                         <button
-                                            onClick={() => onSchedule(s)}
+                                            onClick={async () => {
+                                                if (onSchedule) {
+                                                    await onSchedule(s)
+                                                    refetch()
+                                                }
+                                            }}
                                             style={{
                                                 padding: '6px 14px',
                                                 borderRadius: '6px',

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { hu } from 'date-fns/locale'
+import { useConflictDetection, type Conflict } from '@/hooks/useConflictDetection'
 
 interface EventModalProps {
     date: Date
@@ -32,6 +33,24 @@ export default function EventModal({ date, onSave, onClose }: EventModalProps) {
     const [startTime, setStartTime] = useState('09:00')
     const [endTime, setEndTime] = useState('10:00')
     const [saving, setSaving] = useState(false)
+    const [conflicts, setConflicts] = useState<Conflict[]>([])
+    const { checkConflicts } = useConflictDetection()
+
+    // Auto-check conflicts when date/time changes
+    useEffect(() => {
+        const timer = setTimeout(async () => {
+            if (startTime && endTime && startTime < endTime) {
+                const result = await checkConflicts(
+                    format(selectedDate, 'yyyy-MM-dd'),
+                    startTime,
+                    endTime,
+                    'event'
+                )
+                setConflicts(result)
+            }
+        }, 300)
+        return () => clearTimeout(timer)
+    }, [selectedDate, startTime, endTime, checkConflicts])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -234,6 +253,29 @@ export default function EventModal({ date, onSave, onClose }: EventModalProps) {
                             }}
                         />
                     </div>
+
+                    {/* Conflict Warnings */}
+                    {conflicts.length > 0 && (
+                        <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            padding: '12px',
+                            borderRadius: '8px',
+                            background: conflicts.some(c => c.severity === 'error') ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                            border: `1px solid ${conflicts.some(c => c.severity === 'error') ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                        }}>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: conflicts.some(c => c.severity === 'error') ? '#ef4444' : '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                ⚠️ Ütközések ({conflicts.length})
+                            </div>
+                            {conflicts.map((c, i) => (
+                                <div key={i} style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    <span>{c.emoji}</span>
+                                    <span>{c.description}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Buttons */}
                     <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>

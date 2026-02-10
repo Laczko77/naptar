@@ -8,6 +8,7 @@ import HoursProgress from '@/components/work-hours/HoursProgress'
 import ShiftList from '@/components/work-hours/ShiftList'
 import ShiftModal from '@/components/work-hours/ShiftModal'
 import ShiftSuggestions from '@/components/work-hours/ShiftSuggestions'
+import WorkHoursForecast from '@/components/work-hours/WorkHoursForecast'
 
 export default function WorkHoursPage() {
     const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -120,21 +121,31 @@ export default function WorkHoursPage() {
                     ⏳ Betöltés...
                 </div>
             ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'start' }}>
-                    {/* Left: Progress Dashboard */}
-                    <HoursProgress
+                <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'start' }}>
+                        {/* Left: Progress Dashboard */}
+                        <HoursProgress
+                            totalHours={stats.totalHours}
+                            monthlyTarget={stats.monthlyTarget}
+                            progress={stats.progress}
+                            remaining={stats.remaining}
+                            byType={stats.byType}
+                            weeks={stats.weeks}
+                            shiftCount={stats.shiftCount}
+                        />
+
+                        {/* Right: Shift List */}
+                        <ShiftList shifts={shifts} onDelete={handleDeleteShift} />
+                    </div>
+
+                    {/* Work Hours Forecast */}
+                    <WorkHoursForecast
                         totalHours={stats.totalHours}
                         monthlyTarget={stats.monthlyTarget}
-                        progress={stats.progress}
-                        remaining={stats.remaining}
                         byType={stats.byType}
-                        weeks={stats.weeks}
-                        shiftCount={stats.shiftCount}
+                        currentMonth={currentMonth}
                     />
-
-                    {/* Right: Shift List */}
-                    <ShiftList shifts={shifts} onDelete={handleDeleteShift} />
-                </div>
+                </>
             )}
 
             {/* Quick Stats Bar */}

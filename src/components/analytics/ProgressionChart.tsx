@@ -9,8 +9,6 @@ interface ProgressionChartProps {
 
 export default function ProgressionChart({ exercise, onClose }: ProgressionChartProps) {
     const { weeklyData } = exercise
-    const maxVolume = Math.max(...weeklyData.map((w) => w.volumeLoad), 1)
-    const maxWeight = Math.max(...weeklyData.map((w) => w.maxWeight), 1)
 
     const categoryConfig = {
         excellent: { color: '#22c55e', label: 'Kiváló', emoji: '🔥' },
@@ -19,6 +17,43 @@ export default function ProgressionChart({ exercise, onClose }: ProgressionChart
         regression: { color: '#ef4444', label: 'Visszaesés', emoji: '🔻' },
     }
     const cat = categoryConfig[exercise.category]
+
+    // SVG line chart dimensions
+    const chartW = 460
+    const chartH = 120
+    const padX = 30
+    const padY = 15
+    const innerW = chartW - padX * 2
+    const innerH = chartH - padY * 2
+
+    // Compute line chart points
+    function buildLinePath(values: number[]): { path: string; dots: { x: number; y: number; val: number }[] } {
+        if (values.length === 0) return { path: '', dots: [] }
+        const minV = Math.min(...values) * 0.9
+        const maxV = Math.max(...values) * 1.1
+        const range = maxV - minV || 1
+        const dots = values.map((v, i) => ({
+            x: padX + (values.length > 1 ? (i / (values.length - 1)) * innerW : innerW / 2),
+            y: padY + innerH - ((v - minV) / range) * innerH,
+            val: v,
+        }))
+        const path = dots.map((d, i) => `${i === 0 ? 'M' : 'L'} ${d.x} ${d.y}`).join(' ')
+        return { path, dots }
+    }
+
+    const weightLine = buildLinePath(weeklyData.map((w) => w.avgWeight))
+    const repsLine = buildLinePath(weeklyData.map((w) => w.avgReps))
+    const volumeLine = buildLinePath(weeklyData.map((w) => w.volumeLoad))
+
+    // Moving average for volume
+    function movingAvg(values: number[], window: number = 3): number[] {
+        return values.map((_, i) => {
+            const start = Math.max(0, i - window + 1)
+            const slice = values.slice(start, i + 1)
+            return slice.reduce((a, b) => a + b, 0) / slice.length
+        })
+    }
+    const volumeAvgLine = buildLinePath(movingAvg(weeklyData.map((w) => w.volumeLoad)))
 
     return (
         <div
@@ -84,61 +119,91 @@ export default function ProgressionChart({ exercise, onClose }: ProgressionChart
                     </div>
                 </div>
 
-                {/* Volume Load Chart */}
+                {/* Weight + Reps Line Chart */}
                 <div style={{ marginBottom: '20px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
-                        Heti Volume Load (szett × ism × súly)
+                    <div style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#818cf8' }}>● Súly (kg)</span>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#22c55e' }}>● Ismétlés</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'end', gap: '4px', height: '80px' }}>
-                        {weeklyData.map((w, i) => {
-                            const heightPct = (w.volumeLoad / maxVolume) * 100
-                            const isLast = i === weeklyData.length - 1
-                            return (
-                                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                                    <span style={{ fontSize: '9px', color: 'var(--color-text-secondary)' }}>
-                                        {w.volumeLoad}
-                                    </span>
-                                    <div
-                                        title={`${w.week}: ${w.volumeLoad} VL`}
-                                        style={{
-                                            width: '100%',
-                                            height: `${Math.max(heightPct, 5)}%`,
-                                            borderRadius: '4px 4px 0 0',
-                                            background: isLast ? cat.color : `${cat.color}40`,
-                                            transition: 'height 0.4s ease-out',
-                                        }}
-                                    />
-                                    <span style={{ fontSize: '9px', color: 'var(--color-text-secondary)' }}>{w.week}</span>
-                                </div>
-                            )
-                        })}
+                    <div style={{ background: 'var(--color-bg-tertiary)', borderRadius: '8px', padding: '8px', overflow: 'hidden' }}>
+                        <svg width="100%" viewBox={`0 0 ${chartW} ${chartH}`} style={{ display: 'block' }}>
+                            {/* Grid lines */}
+                            {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
+                                <line key={i} x1={padX} x2={chartW - padX} y1={padY + innerH * (1 - pct)} y2={padY + innerH * (1 - pct)} stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+                            ))}
+
+                            {/* Weight line */}
+                            <path d={weightLine.path} fill="none" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                            {weightLine.dots.map((d, i) => (
+                                <g key={`w${i}`}>
+                                    <circle cx={d.x} cy={d.y} r="4" fill="#818cf8" />
+                                    <text x={d.x} y={d.y - 8} fill="#818cf8" fontSize="8" textAnchor="middle" fontWeight="600">
+                                        {d.val}
+                                    </text>
+                                </g>
+                            ))}
+
+                            {/* Reps line */}
+                            <path d={repsLine.path} fill="none" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 3" strokeLinecap="round" />
+                            {repsLine.dots.map((d, i) => (
+                                <g key={`r${i}`}>
+                                    <circle cx={d.x} cy={d.y} r="3" fill="#22c55e" />
+                                    <text x={d.x} y={d.y + 14} fill="#22c55e" fontSize="8" textAnchor="middle">
+                                        {d.val}
+                                    </text>
+                                </g>
+                            ))}
+
+                            {/* Week labels */}
+                            {weeklyData.map((w, i) => {
+                                const x = padX + (weeklyData.length > 1 ? (i / (weeklyData.length - 1)) * innerW : innerW / 2)
+                                return (
+                                    <text key={i} x={x} y={chartH - 2} fill="rgba(255,255,255,0.3)" fontSize="8" textAnchor="middle">
+                                        {w.week}
+                                    </text>
+                                )
+                            })}
+                        </svg>
                     </div>
                 </div>
 
-                {/* Weight Trend */}
+                {/* Volume Load Line Chart with Moving Average */}
                 <div style={{ marginBottom: '20px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
-                        Max. súly trend (kg)
+                    <div style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: cat.color }}>● Volume Load</span>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.3)' }}>── Mozgóátlag</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'end', gap: '4px', height: '60px' }}>
-                        {weeklyData.map((w, i) => {
-                            const heightPct = (w.maxWeight / maxWeight) * 100
-                            const isLast = i === weeklyData.length - 1
-                            return (
-                                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                                    <span style={{ fontSize: '9px', color: 'var(--color-text-secondary)' }}>{w.maxWeight}</span>
-                                    <div
-                                        style={{
-                                            width: '100%',
-                                            height: `${Math.max(heightPct, 5)}%`,
-                                            borderRadius: '4px 4px 0 0',
-                                            background: isLast ? '#818cf8' : 'rgba(129, 140, 248, 0.3)',
-                                            transition: 'height 0.4s ease-out',
-                                        }}
-                                    />
-                                </div>
-                            )
-                        })}
+                    <div style={{ background: 'var(--color-bg-tertiary)', borderRadius: '8px', padding: '8px', overflow: 'hidden' }}>
+                        <svg width="100%" viewBox={`0 0 ${chartW} ${chartH}`} style={{ display: 'block' }}>
+                            {/* Grid */}
+                            {[0, 0.5, 1].map((pct, i) => (
+                                <line key={i} x1={padX} x2={chartW - padX} y1={padY + innerH * (1 - pct)} y2={padY + innerH * (1 - pct)} stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+                            ))}
+
+                            {/* Moving average line */}
+                            <path d={volumeAvgLine.path} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" strokeDasharray="4 4" />
+
+                            {/* Volume line */}
+                            <path d={volumeLine.path} fill="none" stroke={cat.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                            {volumeLine.dots.map((d, i) => (
+                                <g key={`v${i}`}>
+                                    <circle cx={d.x} cy={d.y} r="4" fill={cat.color} />
+                                    <text x={d.x} y={d.y - 8} fill={cat.color} fontSize="8" textAnchor="middle" fontWeight="600">
+                                        {d.val}
+                                    </text>
+                                </g>
+                            ))}
+
+                            {/* Week labels */}
+                            {weeklyData.map((w, i) => {
+                                const x = padX + (weeklyData.length > 1 ? (i / (weeklyData.length - 1)) * innerW : innerW / 2)
+                                return (
+                                    <text key={i} x={x} y={chartH - 2} fill="rgba(255,255,255,0.3)" fontSize="8" textAnchor="middle">
+                                        {w.week}
+                                    </text>
+                                )
+                            })}
+                        </svg>
                     </div>
                 </div>
 

@@ -7,18 +7,11 @@ export default function DashboardLayout({
     children: React.ReactNode
 }) {
     return (
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
+        <div className="dashboard-layout">
             <Sidebar />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div className="dashboard-content">
                 <Header />
-                <main
-                    style={{
-                        flex: 1,
-                        padding: '24px',
-                        overflowY: 'auto',
-                        background: 'var(--color-bg)',
-                    }}
-                >
+                <main className="dashboard-main">
                     {children}
                 </main>
             </div>

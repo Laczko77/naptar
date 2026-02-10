@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useAnalytics, type ExerciseAnalytics } from '@/hooks/useAnalytics'
 import ProgressionChart from '@/components/analytics/ProgressionChart'
+import MuscleGroupSummary from '@/components/analytics/MuscleGroupSummary'
 
 export default function AnalyticsPage() {
     const [weeks, setWeeks] = useState(6)
@@ -277,6 +278,18 @@ export default function AnalyticsPage() {
                                 )
                             })}
                         </div>
+                    </div>
+
+                    {/* Muscle Group Summary */}
+                    <div style={{ marginTop: '24px' }}>
+                        <MuscleGroupSummary
+                            exerciseLogs={analytics.map((a) => ({
+                                exerciseName: a.exercise.name,
+                                sets: a.totalSets,
+                                avgReps: a.latestReps,
+                                avgWeight: a.latestWeight,
+                            }))}
+                        />
                     </div>
                 </>
             )}

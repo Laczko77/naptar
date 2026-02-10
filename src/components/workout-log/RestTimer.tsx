@@ -12,6 +12,42 @@ export default function RestTimer({ durationSeconds, onComplete, onDismiss }: Re
     const [remaining, setRemaining] = useState(durationSeconds)
     const [isRunning, setIsRunning] = useState(true)
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
+    const audioCtxRef = useRef<AudioContext | null>(null)
+
+    // Play a beep using Web Audio API
+    const playBeep = useCallback((frequency: number = 800, duration: number = 200, count: number = 1) => {
+        try {
+            if (!audioCtxRef.current) {
+                audioCtxRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+            }
+            const ctx = audioCtxRef.current
+            let delay = 0
+            for (let i = 0; i < count; i++) {
+                const osc = ctx.createOscillator()
+                const gain = ctx.createGain()
+                osc.connect(gain)
+                gain.connect(ctx.destination)
+                osc.frequency.value = frequency
+                osc.type = 'sine'
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + delay)
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + duration / 1000)
+                osc.start(ctx.currentTime + delay)
+                osc.stop(ctx.currentTime + delay + duration / 1000)
+                delay += (duration + 100) / 1000
+            }
+        } catch {
+            // Audio not supported
+        }
+    }, [])
+
+    // Vibrate on mobile
+    const vibrate = useCallback((pattern: number[]) => {
+        try {
+            if (navigator.vibrate) navigator.vibrate(pattern)
+        } catch {
+            // Vibration not supported
+        }
+    }, [])
 
     useEffect(() => {
         if (!isRunning) return
@@ -21,8 +57,16 @@ export default function RestTimer({ durationSeconds, onComplete, onDismiss }: Re
                 if (prev <= 1) {
                     clearInterval(intervalRef.current!)
                     setIsRunning(false)
+                    // Completion: triple beep + vibration
+                    playBeep(880, 250, 3)
+                    vibrate([200, 100, 200, 100, 400])
                     onComplete()
                     return 0
+                }
+                // Warning beep at 10 seconds
+                if (prev === 11) {
+                    playBeep(600, 150, 1)
+                    vibrate([100])
                 }
                 return prev - 1
             })
@@ -31,7 +75,7 @@ export default function RestTimer({ durationSeconds, onComplete, onDismiss }: Re
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current)
         }
-    }, [isRunning, onComplete])
+    }, [isRunning, onComplete, playBeep, vibrate])
 
     const togglePause = () => setIsRunning(!isRunning)
     const addTime = (sec: number) => setRemaining((prev) => prev + sec)
