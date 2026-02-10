@@ -25,6 +25,7 @@ const EVENT_TYPES = [
 ] as const
 
 export default function EventModal({ date, onSave, onClose }: EventModalProps) {
+    const [selectedDate, setSelectedDate] = useState(date)
     const [eventType, setEventType] = useState<'workout' | 'girlfriend' | 'cooking' | 'other'>('other')
     const [title, setTitle] = useState('')
     const [description, setDescription] = useState('')
@@ -37,7 +38,7 @@ export default function EventModal({ date, onSave, onClose }: EventModalProps) {
         setSaving(true)
         await onSave({
             event_type: eventType,
-            event_date: format(date, 'yyyy-MM-dd'),
+            event_date: format(selectedDate, 'yyyy-MM-dd'),
             start_time: startTime,
             end_time: endTime,
             title,
@@ -74,12 +75,36 @@ export default function EventModal({ date, onSave, onClose }: EventModalProps) {
                     boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
                 }}
             >
-                <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '4px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>
                     Új Esemény
                 </h3>
-                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '20px', textTransform: 'capitalize' }}>
-                    {format(date, 'yyyy. MMMM d. (EEEE)', { locale: hu })}
-                </p>
+
+                {/* Date Picker */}
+                <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                        Dátum
+                    </label>
+                    <input
+                        type="date"
+                        value={format(selectedDate, 'yyyy-MM-dd')}
+                        onChange={(e) => {
+                            if (e.target.value) setSelectedDate(new Date(e.target.value + 'T00:00:00'))
+                        }}
+                        style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--color-border)',
+                            background: 'var(--color-bg-tertiary)',
+                            color: 'var(--color-text)',
+                            fontSize: '14px',
+                            outline: 'none',
+                        }}
+                    />
+                    <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px', textTransform: 'capitalize' }}>
+                        {format(selectedDate, 'EEEE', { locale: hu })}
+                    </p>
+                </div>
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     {/* Event Type Selector */}
