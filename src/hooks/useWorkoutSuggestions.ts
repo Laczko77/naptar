@@ -182,7 +182,9 @@ export function useWorkoutSuggestions(weekStartDate: Date, cycleStartDate: strin
 
                     if (freeSlots.length === 0) continue
 
-                    // ─── Score each free slot for workout ────────────
+                    // ─── Score candidate start times within free slots ────────────
+                    // Instead of scoring the whole slot, generate candidate starts
+                    // every hour so the best time within a large slot wins.
                     interface ScoredSlot {
                         start: number
                         end: number
@@ -194,69 +196,87 @@ export function useWorkoutSuggestions(weekStartDate: Date, cycleStartDate: strin
                     const scoredSlots: ScoredSlot[] = []
 
                     for (const slot of freeSlots) {
-                        let score = 50 // base score
-                        const tags: string[] = []
-                        const reasons: string[] = []
-
-                        // Prefer after friend's last class (train together!)
-                        if (friendClasses.length > 0) {
-                            const lastClassEnd = Math.max(...friendClasses.map(c => timeToHours(c.end_time)))
-                            const firstClassStart = Math.min(...friendClasses.map(c => timeToHours(c.start_time)))
-
-                            if (slot.start >= lastClassEnd && slot.start <= lastClassEnd + 1) {
-                                score += 30
-                                tags.push('👫 Baráttal együtt')
-                                reasons.push('Barát órái után – együtt edzhettek')
-                            } else if (slot.start >= lastClassEnd) {
-                                score += 15
-                                tags.push('📚 Órák után')
-                            } else if (slot.end <= firstClassStart) {
-                                score += 5
-                                tags.push('🌅 Óra előtt')
-                            }
-                        } else {
-                            // No classes today → more flexibility
-                            if (!friendSleptToday) {
-                                tags.push('👫 Barát szabad')
-                                score += 20
+                        // Generate candidate start times every hour within slot
+                        const candidates: number[] = []
+                        for (let t = slot.start; t + WORKOUT_DURATION <= slot.end; t += 1) {
+                            candidates.push(t)
+                        }
+                        // Also add half-hour candidates for key times
+                        for (const t of [9.5, 10, 10.5, 14, 14.5, 15]) {
+                            if (t >= slot.start && t + WORKOUT_DURATION <= slot.end && !candidates.includes(t)) {
+                                candidates.push(t)
                             }
                         }
+                        candidates.sort((a, b) => a - b)
 
-                        // If friend is sleeping (night shift), prefer afternoon
-                        if (friendSleptToday) {
-                            if (slot.start >= 14) {
-                                score += 25
-                                tags.push('🌙 Barát felébredt')
-                                reasons.push('Barát éjszakai után – 14:00 utáni edzés ideális')
+                        for (const candidateStart of candidates) {
+                            let score = 50 // base score
+                            const tags: string[] = []
+                            const reasons: string[] = []
+
+                            // Prefer after friend's last class (train together!)
+                            if (friendClasses.length > 0) {
+                                const lastClassEnd = Math.max(...friendClasses.map(c => timeToHours(c.end_time)))
+                                const firstClassStart = Math.min(...friendClasses.map(c => timeToHours(c.start_time)))
+
+                                if (candidateStart >= lastClassEnd && candidateStart <= lastClassEnd + 1) {
+                                    score += 30
+                                    tags.push('👫 Baráttal együtt')
+                                    reasons.push('Barát órái után – együtt edzhettek')
+                                } else if (candidateStart >= lastClassEnd) {
+                                    score += 15
+                                    tags.push('📚 Órák után')
+                                } else if (candidateStart + WORKOUT_DURATION <= firstClassStart) {
+                                    score += 5
+                                    tags.push('🌅 Óra előtt')
+                                }
                             } else {
-                                score -= 20
-                                tags.push('😴 Barát alszik')
-                                reasons.push('Barát még alszik – egyedül edzés')
+                                // No classes today → more flexibility
+                                if (!friendSleptToday) {
+                                    tags.push('👫 Barát szabad')
+                                    score += 20
+                                }
                             }
+
+                            // If friend is sleeping (night shift), prefer afternoon
+                            if (friendSleptToday) {
+                                if (candidateStart >= 14) {
+                                    score += 25
+                                    tags.push('🌙 Barát felébredt')
+                                    reasons.push('Barát éjszakai után – 14:00 utáni edzés ideális')
+                                } else {
+                                    score -= 20
+                                    tags.push('😴 Barát alszik')
+                                    reasons.push('Barát még alszik – egyedül edzés')
+                                }
+                            }
+
+                            // Prefer mid-morning (10:00–11:00) or early afternoon (14:00–16:00)
+                            if (candidateStart >= 10 && candidateStart <= 11) {
+                                score += 15
+                                reasons.push('Optimális időpont: délelőtt')
+                            } else if (candidateStart >= 9 && candidateStart < 10) {
+                                score += 8
+                                reasons.push('Jó időpont: kora délelőtt')
+                            } else if (candidateStart >= 14 && candidateStart <= 16) {
+                                score += 12
+                                reasons.push('Optimális időpont: kora délután')
+                            } else if (candidateStart >= 18) {
+                                score += 3
+                            }
+
+                            // Penalize very early or very late
+                            if (candidateStart < 9) score -= 15
+                            if (candidateStart >= 19) score -= 15
+
+                            scoredSlots.push({
+                                start: candidateStart,
+                                end: candidateStart + WORKOUT_DURATION,
+                                score,
+                                tags,
+                                reasons,
+                            })
                         }
-
-                        // Prefer mid-morning or early afternoon (peak performance)
-                        if (slot.start >= 9 && slot.start <= 11) {
-                            score += 10
-                            reasons.push('Optimális időpont: délelőtt')
-                        } else if (slot.start >= 14 && slot.start <= 16) {
-                            score += 12
-                            reasons.push('Optimális időpont: kora délután')
-                        } else if (slot.start >= 18) {
-                            score += 3
-                        }
-
-                        // Penalize very early or very late
-                        if (slot.start < 8) score -= 10
-                        if (slot.start >= 19) score -= 15
-
-                        scoredSlots.push({
-                            start: slot.start,
-                            end: slot.end,
-                            score,
-                            tags,
-                            reasons,
-                        })
                     }
 
                     // Pick the best slot
